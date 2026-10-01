@@ -29,6 +29,8 @@ const App = (() => {
 
     saveActivity(activityKey, data) {
       this.set('act_' + activityKey, data);
+      Cloud.syncActivityDebounced(activityKey, data);
+      updateHomeStatus();
     },
 
     getActivity(activityKey) {
@@ -39,6 +41,315 @@ const App = (() => {
       return !!this.get('act_' + activityKey);
     }
   };
+
+  // ---------- Cloud Sync Subsystem (Supabase / Nuvem / Multi-dispositivo) ----------
+  const Cloud = {
+    _syncTimeout: null,
+
+    updateSyncBadge(status, text) {
+      const badge = document.getElementById('header-sync-status');
+      if (!badge) return;
+      badge.style.display = 'flex';
+      badge.className = 'header-sync-badge ' + (status || '');
+      const textEl = badge.querySelector('.sync-text');
+      if (textEl) {
+        textEl.textContent = text || (status === 'syncing' ? 'Salvando...' : status === 'offline' ? 'Modo Offline' : 'Sincronizado');
+      }
+    },
+
+    async login(matricula, password, name = '', turma = '') {
+      const mat = String(matricula || '').trim().toLowerCase();
+      const pass = String(password || '').trim();
+
+      // 1. SUPABASE (Para Vercel e Acesso em Qualquer Lugar)
+      if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isConfigured()) {
+        const sb = SupabaseClient.getClient();
+        try {
+          const { data: existing, error } = await sb
+            .from('students')
+            .select('*')
+            .eq('matricula', mat)
+            .maybeSingle();
+
+          if (error && error.code !== 'PGRST116') {
+            console.warn('Aviso Supabase login:', error);
+          }
+
+          if (existing) {
+            if (existing.password_hash && existing.password_hash !== pass) {
+              return { ok: false, error: 'Senha incorreta para esta matrícula.' };
+            }
+
+            // Atualiza timestamp
+            await sb.from('students').update({ last_sync_at: new Date().toISOString() }).eq('matricula', mat);
+
+            return {
+              ok: true,
+              data: {
+                student: { matricula: existing.matricula, name: existing.name, turma: existing.turma || '' },
+                activities: existing.activities || {}
+              }
+            };
+          }
+
+          // Primeiro acesso (não cadastrado ainda)
+          if (!name) {
+            return { ok: false, error: 'Matrícula não cadastrada. Por favor, utilize a aba "Primeiro Acesso" para criar sua conta.' };
+          }
+
+          // Monta atividades locais se já tiver preenchido algo
+          const initialActs = {};
+          const localA1 = Storage.get('act_1');
+          const localA2 = Storage.get('act_2');
+          const localA3 = Storage.get('act_3');
+          const localA4 = Storage.get('act_4');
+          if (localA1) initialActs['1'] = localA1;
+          if (localA2) initialActs['2'] = localA2;
+          if (localA3) initialActs['3'] = localA3;
+          if (localA4) initialActs['4'] = localA4;
+
+          const newStudent = {
+            matricula: mat,
+            name: String(name).trim(),
+            turma: String(turma).trim(),
+            password_hash: pass,
+            activities: initialActs,
+            last_sync_at: new Date().toISOString()
+          };
+
+          const { error: insertErr } = await sb
+            .from('students')
+            .insert(newStudent);
+
+          if (insertErr) {
+            console.error('Erro cadastro Supabase:', insertErr);
+            return { ok: false, error: 'Erro ao cadastrar no Supabase: ' + (insertErr.message || 'Verifique as tabelas SQL.') };
+          }
+
+          return {
+            ok: true,
+            data: {
+              student: { matricula: newStudent.matricula, name: newStudent.name, turma: newStudent.turma },
+              activities: newStudent.activities
+            }
+          };
+        } catch (err) {
+          console.warn('Erro na conexão com Supabase:', err);
+        }
+      }
+
+      // 2. FALLBACK: Servidor Node.js Local (/api/auth/login)
+      try {
+        const payload = { matricula: mat, password: pass, name, turma };
+        const localA1 = Storage.get('act_1');
+        const localA2 = Storage.get('act_2');
+        const localA3 = Storage.get('act_3');
+        const localA4 = Storage.get('act_4');
+        if (localA1 || localA2 || localA3 || localA4) {
+          payload.initialActivities = {};
+          if (localA1) payload.initialActivities['1'] = localA1;
+          if (localA2) payload.initialActivities['2'] = localA2;
+          if (localA3) payload.initialActivities['3'] = localA3;
+          if (localA4) payload.initialActivities['4'] = localA4;
+        }
+
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        return { ok: res.ok, status: res.status, data };
+      } catch (err) {
+        console.warn('Servidor offline:', err);
+        return { ok: false, offline: true, error: 'Servidor ou Supabase não acessível no momento.' };
+      }
+    },
+
+    syncActivityDebounced(activityKey, data) {
+      if (this._syncTimeout) clearTimeout(this._syncTimeout);
+      this.updateSyncBadge('syncing', 'Salvando na nuvem...');
+      this._syncTimeout = setTimeout(() => {
+        this.syncActivity(activityKey, data);
+      }, 500);
+    },
+
+    async syncActivity(activityKey, data) {
+      const student = getStudent();
+      if (!student || !student.matricula) {
+        this.updateSyncBadge('offline', 'Salvo no aparelho');
+        return;
+      }
+
+      const mat = String(student.matricula).trim().toLowerCase();
+
+      // 1. SUPABASE
+      if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isConfigured()) {
+        const sb = SupabaseClient.getClient();
+        try {
+          const { data: curr } = await sb.from('students').select('activities').eq('matricula', mat).maybeSingle();
+          const acts = (curr && curr.activities) ? curr.activities : {};
+          acts[String(activityKey)] = data;
+
+          const { error } = await sb
+            .from('students')
+            .update({ activities: acts, last_sync_at: new Date().toISOString() })
+            .eq('matricula', mat);
+
+          if (!error) {
+            this.updateSyncBadge('', 'Sincronizado na nuvem ✓');
+            return;
+          }
+        } catch (err) {
+          console.warn('Erro ao atualizar Supabase:', err);
+        }
+      }
+
+      // 2. FALLBACK NODE.JS
+      try {
+        const res = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            matricula: student.matricula,
+            password: student.password || '',
+            activityKey: String(activityKey),
+            data
+          })
+        });
+
+        if (res.ok) {
+          this.updateSyncBadge('', 'Sincronizado na nuvem ✓');
+        } else {
+          this.updateSyncBadge('offline', 'Salvo localmente');
+        }
+      } catch (e) {
+        this.updateSyncBadge('offline', 'Salvo localmente (offline)');
+      }
+    },
+
+    async fetchStudentData(matricula) {
+      const mat = String(matricula || '').trim().toLowerCase();
+
+      // 1. SUPABASE
+      if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isConfigured()) {
+        const sb = SupabaseClient.getClient();
+        try {
+          const { data, error } = await sb.from('students').select('*').eq('matricula', mat).maybeSingle();
+          if (!error && data) {
+            return {
+              matricula: data.matricula,
+              name: data.name,
+              turma: data.turma || '',
+              activities: data.activities || {},
+              lastSyncAt: data.last_sync_at
+            };
+          }
+        } catch {}
+      }
+
+      // 2. FALLBACK NODE.JS
+      try {
+        const res = await fetch('/api/student/' + encodeURIComponent(matricula));
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      }
+    },
+
+    async submitReport(submissionData) {
+      // 1. SUPABASE
+      if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isConfigured()) {
+        const sb = SupabaseClient.getClient();
+        try {
+          const subId = 'sub_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          const { error } = await sb.from('submissions').insert({
+            id: subId,
+            matricula: submissionData.matricula || 'anonimo',
+            student_name: submissionData.studentName || 'Não informado',
+            turma: submissionData.turma || '',
+            activities: submissionData.activities || {},
+            report_text: submissionData.reportText || '',
+            status: 'enviada'
+          });
+
+          if (!error) {
+            return { ok: true, data: { submissionId: subId } };
+          }
+        } catch (e) {
+          console.warn('Erro ao enviar relatório no Supabase:', e);
+        }
+      }
+
+      // 2. FALLBACK NODE.JS
+      try {
+        const res = await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submissionData)
+        });
+        const data = await res.json();
+        return { ok: res.ok, data };
+      } catch (err) {
+        return { ok: false, error: 'Servidor indisponível.' };
+      }
+    },
+
+    async fetchAdminOverview(token) {
+      // 1. SUPABASE
+      if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isConfigured()) {
+        const sb = SupabaseClient.getClient();
+        try {
+          const { data: students, error: errS } = await sb.from('students').select('*').order('last_sync_at', { ascending: false });
+          const { data: subs } = await sb.from('submissions').select('*');
+
+          if (!errS && students) {
+            const summary = students.map(s => {
+              const acts = s.activities || {};
+              return {
+                matricula: s.matricula,
+                name: s.name,
+                turma: s.turma || '',
+                createdAt: s.created_at,
+                lastSyncAt: s.last_sync_at,
+                a1_done: !!acts['1'],
+                a2_done: !!acts['2'],
+                a3_done: !!acts['3'],
+                a4_done: !!acts['4'],
+                submissionsCount: (subs || []).filter(sub => sub.matricula === s.matricula).length
+              };
+            });
+
+            return {
+              ok: true,
+              data: {
+                totalStudents: summary.length,
+                totalSubmissions: (subs || []).length,
+                students: summary,
+                isSupabase: true
+              }
+            };
+          }
+        } catch (e) {
+          console.warn('Erro admin Supabase:', e);
+        }
+      }
+
+      // 2. FALLBACK NODE.JS
+      try {
+        const res = await fetch('/api/admin/overview', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        return { ok: res.ok, data };
+      } catch {
+        return { ok: false, error: 'Não foi possível carregar os dados administrativos.' };
+      }
+    }
+  };
+
 
   // ---------- Utils ----------
   const Utils = {
@@ -175,54 +486,203 @@ const App = (() => {
     if (navHome) navHome.style.display = '';
     if (navReport) navReport.style.display = '';
     if (navLogout) navLogout.style.display = '';
+
+    Cloud.updateSyncBadge(student.offline ? 'offline' : '', student.offline ? 'Modo Offline' : 'Sincronizado na nuvem ✓');
   }
 
-  function handleLogin() {
-    const nameInput = document.getElementById('login-name');
-    const turmaInput = document.getElementById('login-turma');
-    const errorEl = document.getElementById('login-error');
-    const name = nameInput.value.trim();
-    const turma = turmaInput.value.trim();
+  function switchLoginTab(tab) {
+    const tabLoginBtn = document.getElementById('tab-login-btn');
+    const tabRegBtn = document.getElementById('tab-register-btn');
+    const panelLogin = document.getElementById('panel-login');
+    const panelReg = document.getElementById('panel-register');
 
-    if (!name) {
-      errorEl.classList.add('visible');
-      nameInput.classList.add('error');
-      nameInput.focus();
+    if (tab === 'login') {
+      tabLoginBtn.classList.add('active');
+      tabRegBtn.classList.remove('active');
+      panelLogin.classList.add('active');
+      panelReg.classList.remove('active');
+    } else {
+      tabRegBtn.classList.add('active');
+      tabLoginBtn.classList.remove('active');
+      panelReg.classList.add('active');
+      panelLogin.classList.remove('active');
+    }
+  }
+
+  async function handleLoginSubmit() {
+    const matInput = document.getElementById('login-matricula');
+    const passInput = document.getElementById('login-password');
+    const errEl = document.getElementById('login-error-msg');
+    const matricula = matInput.value.trim();
+    const password = passInput.value.trim();
+
+    if (!matricula || !password) {
+      errEl.textContent = 'Informe sua matrícula e sua senha de acesso.';
+      errEl.classList.add('visible');
       return;
     }
 
-    errorEl.classList.remove('visible');
-    nameInput.classList.remove('error');
-    loggedStudent = { name, turma };
+    errEl.classList.remove('visible');
+    const btn = document.getElementById('btn-do-login');
+    const originalText = btn.textContent;
+    btn.textContent = 'Sincronizando com a nuvem...';
+    btn.disabled = true;
+
+    const res = await Cloud.login(matricula, password);
+    btn.textContent = originalText;
+    btn.disabled = false;
+
+    if (!res.ok) {
+      if (res.offline) {
+        // Modo offline se servidor estiver indisponível
+        const savedStudent = Storage.get('student');
+        if (savedStudent && savedStudent.matricula === matricula) {
+          loggedStudent = savedStudent;
+          setStudentUI(loggedStudent);
+          updateHomeStatus();
+          Nav.showView('home');
+          Toast.show('Conectado em modo offline (servidor indisponível).', 'info');
+          return;
+        }
+        errEl.textContent = 'Servidor inacessível no momento. Use o modo offline abaixo se estiver sem internet.';
+        errEl.classList.add('visible');
+        return;
+      }
+
+      errEl.textContent = res.data && res.data.error ? res.data.error : 'Erro ao realizar login.';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    // Sucesso no login
+    const sData = res.data.student;
+    loggedStudent = {
+      matricula: sData.matricula,
+      name: sData.name,
+      turma: sData.turma || '',
+      password: password
+    };
+    Storage.set('student', loggedStudent);
+
+    // Carrega e mescla atividades salvas no servidor
+    if (res.data.activities) {
+      const acts = res.data.activities;
+      if (acts['1']) Storage.set('act_1', acts['1']);
+      if (acts['2']) Storage.set('act_2', acts['2']);
+      if (acts['3']) Storage.set('act_3', acts['3']);
+      if (acts['4']) Storage.set('act_4', acts['4']);
+    }
+
+    setStudentUI(loggedStudent);
+    updateHomeStatus();
+    Nav.showView('home');
+    Toast.show(`Bem-vindo de volta, ${loggedStudent.name}! Atividades sincronizadas da nuvem.`, 'success', 4500);
+  }
+
+  async function handleRegisterSubmit() {
+    const matInput = document.getElementById('reg-matricula');
+    const nameInput = document.getElementById('reg-name');
+    const passInput = document.getElementById('reg-password');
+    const turmaInput = document.getElementById('reg-turma');
+    const errEl = document.getElementById('reg-error-msg');
+
+    const matricula = matInput.value.trim();
+    const name = nameInput.value.trim();
+    const password = passInput.value.trim();
+    const turma = turmaInput.value.trim();
+
+    if (!matricula || !name || !password) {
+      errEl.textContent = 'Preencha Matrícula, Nome Completo e Crie uma Senha.';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    errEl.classList.remove('visible');
+    const btn = document.getElementById('btn-do-register');
+    const originalText = btn.textContent;
+    btn.textContent = 'Criando acesso na nuvem...';
+    btn.disabled = true;
+
+    const res = await Cloud.login(matricula, password, name, turma);
+    btn.textContent = originalText;
+    btn.disabled = false;
+
+    if (!res.ok) {
+      if (res.offline) {
+        // Fallback offline
+        loggedStudent = { matricula, name, turma, password, offline: true };
+        Storage.set('student', loggedStudent);
+        setStudentUI(loggedStudent);
+        updateHomeStatus();
+        Nav.showView('home');
+        Toast.show('Conta criada localmente (modo offline).', 'info');
+        return;
+      }
+      errEl.textContent = res.data && res.data.error ? res.data.error : 'Erro ao criar conta.';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    loggedStudent = {
+      matricula: res.data.student.matricula,
+      name: res.data.student.name,
+      turma: res.data.student.turma || '',
+      password: password
+    };
     Storage.set('student', loggedStudent);
 
     setStudentUI(loggedStudent);
     updateHomeStatus();
     Nav.showView('home');
-    Toast.show('Bem-vindo, ' + name + '!', 'success');
+    Toast.show(`Conta criada com sucesso! Olá, ${name}. Suas atividades estão sincronizadas na nuvem.`, 'success', 5000);
+  }
+
+  function handleOfflineAccess(e) {
+    if (e) e.preventDefault();
+    const name = prompt('Informe seu nome completo para acesso local:');
+    if (!name || !name.trim()) return;
+
+    const turma = prompt('Informe sua turma (opcional):') || '';
+    loggedStudent = {
+      matricula: 'local_' + Date.now().toString(36),
+      name: name.trim(),
+      turma: turma.trim(),
+      password: '',
+      offline: true
+    };
+    Storage.set('student', loggedStudent);
+    setStudentUI(loggedStudent);
+    updateHomeStatus();
+    Nav.showView('home');
+    Toast.show(`Modo local ativado. Bem-vindo, ${name}!`, 'info');
   }
 
   function handleLogout() {
     Modal.show(
-      'Trocar de Aluno',
-      'Deseja alterar a identificação do aluno? As atividades já salvas continuarão armazenadas no navegador.',
+      'Trocar de Aluno / Dispositivo',
+      'Deseja sair desta conta? Suas respostas continuarão seguras na nuvem e você poderá entrar novamente a qualquer momento com sua matrícula e senha.',
       () => {
         loggedStudent = null;
         Storage.remove('student');
         document.getElementById('header-student-info').style.display = 'none';
+        const syncBadge = document.getElementById('header-sync-status');
+        if (syncBadge) syncBadge.style.display = 'none';
+
         document.getElementById('nav-home').style.display = 'none';
         document.getElementById('nav-report').style.display = 'none';
         document.getElementById('nav-logout').style.display = 'none';
-        document.getElementById('login-name').value = '';
-        document.getElementById('login-turma').value = '';
+
+        document.getElementById('login-matricula').value = '';
+        document.getElementById('login-password').value = '';
         Nav.showView('login');
-        Toast.show('Identificação redefinida.', 'info');
+        Toast.show('Você saiu da sua conta.', 'info');
       },
       null,
-      'SIM, TROCAR',
+      'SIM, SAIR',
       'CANCELAR'
     );
   }
+
 
   // ---------- Home status ----------
   function updateHomeStatus() {
@@ -543,6 +1003,13 @@ const App = (() => {
         </div>
 
         <div class="report-delivery-grid">
+          <button class="btn btn-emerald" id="btn-cloud-submit" style="grid-column: 1 / -1; font-weight:700; background: linear-gradient(135deg, #059669, #4f46e5); color:white; border:none; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px;" title="Entrega o relatório diretamente no servidor do professor">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Entregar Diretamente no Sistema do Professor (Nuvem)
+          </button>
+
           <button class="btn btn-primary" id="btn-email-mailto" title="Abre seu cliente de e-mail automaticamente">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -584,6 +1051,31 @@ const App = (() => {
     `;
 
     // Bind event handlers
+    const btnCloudSubmit = document.getElementById('btn-cloud-submit');
+    if (btnCloudSubmit) {
+      btnCloudSubmit.addEventListener('click', async () => {
+        btnCloudSubmit.disabled = true;
+        btnCloudSubmit.innerHTML = 'Enviando ao servidor do professor...';
+        const plainText = formatReportAsPlainText(student, now, a1, a2, a3, a4);
+        const res = await Cloud.submitReport({
+          studentName: student.name,
+          matricula: student.matricula || 'anonimo',
+          turma: student.turma || '',
+          activities: { '1': a1, '2': a2, '3': a3, '4': a4 },
+          reportText: plainText
+        });
+        if (res.ok) {
+          btnCloudSubmit.innerHTML = '✓ Entregue com Sucesso no Sistema!';
+          btnCloudSubmit.style.background = '#059669';
+          Toast.show('Relatório entregue com sucesso diretamente ao Professor Anderson!', 'success', 6000);
+        } else {
+          btnCloudSubmit.disabled = false;
+          btnCloudSubmit.innerHTML = 'Entregar Diretamente no Sistema do Professor (Nuvem)';
+          Toast.show('Não foi possível entregar na nuvem agora. Utilize o envio por E-mail ou Copiar Texto.', 'warning', 6000);
+        }
+      });
+    }
+
     document.getElementById('report-prof-email').addEventListener('change', e => {
       Storage.set('prof_email', e.target.value.trim());
     });
@@ -751,28 +1243,47 @@ const App = (() => {
   }
 
   // ---------- Init ----------
-  function init() {
+  async function init() {
     Toast.init();
 
-    // Check if student already logged in earlier
+    // Verifica se já existia aluno logado neste navegador
     const savedStudent = Storage.get('student');
-    if (savedStudent && savedStudent.name) {
+    if (savedStudent && (savedStudent.name || savedStudent.matricula)) {
       loggedStudent = savedStudent;
       setStudentUI(loggedStudent);
       updateHomeStatus();
       Nav.showView('home');
+
+      // Tenta sincronizar silenciosamente com o servidor na nuvem se tiver matrícula
+      if (savedStudent.matricula && !savedStudent.offline) {
+        Cloud.updateSyncBadge('syncing', 'Sincronizando...');
+        const remote = await Cloud.fetchStudentData(savedStudent.matricula);
+        if (remote && remote.activities) {
+          if (remote.activities['1']) Storage.set('act_1', remote.activities['1']);
+          if (remote.activities['2']) Storage.set('act_2', remote.activities['2']);
+          if (remote.activities['3']) Storage.set('act_3', remote.activities['3']);
+          if (remote.activities['4']) Storage.set('act_4', remote.activities['4']);
+          updateHomeStatus();
+          Cloud.updateSyncBadge('', 'Sincronizado na nuvem ✓');
+        } else {
+          Cloud.updateSyncBadge('', 'Sincronizado na nuvem ✓');
+        }
+      }
     } else {
       Nav.showView('login');
       document.getElementById('nav-home').style.display = 'none';
       document.getElementById('nav-report').style.display = 'none';
       document.getElementById('nav-logout').style.display = 'none';
       document.getElementById('header-student-info').style.display = 'none';
+      const syncBadge = document.getElementById('header-sync-status');
+      if (syncBadge) syncBadge.style.display = 'none';
     }
 
     bindGlobalEvents();
   }
 
   function bindGlobalEvents() {
+    // Brand e navegação
     document.getElementById('header-brand').addEventListener('click', () => {
       if (loggedStudent) { updateHomeStatus(); Nav.showView('home'); }
     });
@@ -787,15 +1298,115 @@ const App = (() => {
 
     document.getElementById('nav-logout').addEventListener('click', handleLogout);
 
-    document.getElementById('login-btn').addEventListener('click', handleLogin);
-    document.getElementById('login-name').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
-    document.getElementById('login-turma').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+    // Abas de login
+    const tabLoginBtn = document.getElementById('tab-login-btn');
+    const tabRegBtn = document.getElementById('tab-register-btn');
+    if (tabLoginBtn) tabLoginBtn.addEventListener('click', () => switchLoginTab('login'));
+    if (tabRegBtn) tabRegBtn.addEventListener('click', () => switchLoginTab('register'));
 
+    // Submissão de login
+    const btnDoLogin = document.getElementById('btn-do-login');
+    if (btnDoLogin) btnDoLogin.addEventListener('click', handleLoginSubmit);
+    const loginMat = document.getElementById('login-matricula');
+    if (loginMat) loginMat.addEventListener('keydown', e => { if (e.key === 'Enter') handleLoginSubmit(); });
+    const loginPass = document.getElementById('login-password');
+    if (loginPass) loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') handleLoginSubmit(); });
+
+    // Submissão de registro
+    const btnDoReg = document.getElementById('btn-do-register');
+    if (btnDoReg) btnDoReg.addEventListener('click', handleRegisterSubmit);
+    const regPass = document.getElementById('reg-password');
+    if (regPass) regPass.addEventListener('keydown', e => { if (e.key === 'Enter') handleRegisterSubmit(); });
+
+    // Modo offline
+    const linkOffline = document.getElementById('link-offline-mode');
+    if (linkOffline) linkOffline.addEventListener('click', handleOfflineAccess);
+
+    // Início das atividades
     document.getElementById('btn-start-a1').addEventListener('click', () => Atividade1.start(loggedStudent));
     document.getElementById('btn-start-a2').addEventListener('click', () => Atividade2.start(loggedStudent));
     document.getElementById('btn-start-a3').addEventListener('click', () => Atividade3.start(loggedStudent));
     document.getElementById('btn-start-a4').addEventListener('click', () => Atividade4.start(loggedStudent));
     document.getElementById('btn-generate-report').addEventListener('click', generateReport);
+
+    // Modal do Professor
+    const btnOpenProf = document.getElementById('btn-open-prof-panel');
+    const profModal = document.getElementById('prof-modal-overlay');
+    const btnCloseProf = document.getElementById('btn-close-prof-modal');
+    const btnProfAuth = document.getElementById('btn-prof-auth');
+
+    if (btnOpenProf && profModal) {
+      btnOpenProf.addEventListener('click', () => {
+        profModal.classList.add('active');
+        const passInput = document.getElementById('prof-pass-input');
+        if (passInput) passInput.focus();
+      });
+    }
+
+    if (btnCloseProf && profModal) {
+      btnCloseProf.addEventListener('click', () => {
+        profModal.classList.remove('active');
+      });
+    }
+
+    if (btnProfAuth) {
+      btnProfAuth.addEventListener('click', async () => {
+        const pass = document.getElementById('prof-pass-input').value.trim();
+        const contentDiv = document.getElementById('prof-panel-content');
+        if (!pass) return;
+
+        btnProfAuth.disabled = true;
+        btnProfAuth.textContent = 'Carregando...';
+
+        const res = await Cloud.fetchAdminOverview(pass);
+        btnProfAuth.disabled = false;
+        btnProfAuth.textContent = 'Acessar Painel';
+
+        if (!res.ok) {
+          contentDiv.innerHTML = `<div class="form-error-msg visible" style="display:block;margin-top:var(--space-md)">${res.error || 'Senha incorreta ou servidor offline.'}</div>`;
+          return;
+        }
+
+        const data = res.data;
+        contentDiv.innerHTML = `
+          <div style="margin-top:var(--space-md);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-sm)">
+            <div><strong>${data.totalStudents}</strong> alunos cadastrados &middot; <strong>${data.totalSubmissions}</strong> envios consolidados</div>
+            <a href="/api/admin/export.csv?token=${encodeURIComponent(pass)}" class="btn btn-sm btn-emerald" style="padding:6px 12px;font-size:0.8rem" download>Baixar Planilha (CSV)</a>
+          </div>
+
+          <div style="overflow-x:auto;margin-top:var(--space-md)">
+            <table class="prof-admin-table">
+              <thead>
+                <tr>
+                  <th>Matrícula</th>
+                  <th>Aluno</th>
+                  <th>Turma</th>
+                  <th>Ativ. 01</th>
+                  <th>Ativ. 02</th>
+                  <th>Ativ. 03</th>
+                  <th>Ativ. 04</th>
+                  <th>Envios</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.students.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Nenhum aluno cadastrado ainda.</td></tr>' : data.students.map(s => `
+                  <tr>
+                    <td><code>${Utils.escapeHtml(s.matricula)}</code></td>
+                    <td style="font-weight:600">${Utils.escapeHtml(s.name)}</td>
+                    <td>${Utils.escapeHtml(s.turma || '—')}</td>
+                    <td><span class="status-chip ${s.a1_done ? 'done' : 'pending'}">${s.a1_done ? '✓ Feita' : 'Pendente'}</span></td>
+                    <td><span class="status-chip ${s.a2_done ? 'done' : 'pending'}">${s.a2_done ? '✓ Feita' : 'Pendente'}</span></td>
+                    <td><span class="status-chip ${s.a3_done ? 'done' : 'pending'}">${s.a3_done ? '✓ Feita' : 'Pendente'}</span></td>
+                    <td><span class="status-chip ${s.a4_done ? 'done' : 'pending'}">${s.a4_done ? '✓ Feita' : 'Pendente'}</span></td>
+                    <td style="font-weight:700;text-align:center">${s.submissionsCount}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      });
+    }
   }
 
   return { init, Storage, Utils, Toast, Modal, Nav, getStudent, updateHomeStatus };

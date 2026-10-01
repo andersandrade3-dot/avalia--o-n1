@@ -1,0 +1,22 @@
+{
+  "name": "plataforma-ifce-hardware",
+  "version": "1.0.0",
+  "description": "Plataforma Educacional de Arquitetura e Montagens de Computador — IFCE",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "ifce",
+    "hardware",
+    "processadores",
+    "memoria-ram",
+    "educacao"
+  ],
+  "author": "Professor Anderson Andrade",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

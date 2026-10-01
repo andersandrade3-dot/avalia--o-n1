@@ -260,6 +260,61 @@ kbd {
   box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
 }
 
+.header-sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  transition: all var(--transition);
+}
+
+.header-sync-badge.syncing {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.header-sync-badge.offline {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.header-sync-badge .sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.header-sync-badge.syncing .sync-dot {
+  background: #f59e0b;
+  animation: pulseDot 1s infinite alternate;
+}
+
+.header-sync-badge.offline .sync-dot {
+  background: #94a3b8;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+.header-right-zone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+
 /* ---------- Main Container ---------- */
 .main-container {
   max-width: var(--max-width);
@@ -329,9 +384,120 @@ kbd {
 .login-card .login-desc {
   color: var(--text-secondary);
   font-size: 0.9rem;
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-md);
   line-height: 1.6;
 }
+
+.login-cloud-notice {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: var(--space-lg);
+  font-size: 0.82rem;
+  color: #166534;
+  line-height: 1.5;
+}
+
+.login-cloud-notice .cloud-notice-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.login-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-lg);
+  gap: 4px;
+}
+
+.login-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+
+.login-tab-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.login-tab-panel {
+  display: none;
+}
+
+.login-tab-panel.active {
+  display: block;
+  animation: fadeIn 0.2s ease;
+}
+
+/* Modal Painel do Professor */
+.prof-admin-box {
+  max-width: 900px;
+  width: 95%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.prof-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: var(--space-md);
+}
+
+.prof-admin-table th {
+  background: #f8fafc;
+  color: #475569;
+  text-align: left;
+  padding: 10px 12px;
+  font-weight: 700;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.prof-admin-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.prof-admin-table tr:hover {
+  background: #f8fafc;
+}
+
+.status-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.status-chip.done {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.status-chip.pending {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
 
 /* ---------- Home ---------- */
 .home-hero {

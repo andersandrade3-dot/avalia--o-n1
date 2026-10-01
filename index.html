@@ -27,7 +27,13 @@
         <button id="nav-logout" style="display:none;opacity:0.8;font-size:0.78rem" title="Alterar identificação do aluno">Trocar Aluno</button>
       </nav>
 
-      <div class="header-student" id="header-student-info"></div>
+      <div class="header-right-zone">
+        <div class="header-sync-badge" id="header-sync-status" style="display:none" title="Status da sincronização na nuvem">
+          <span class="sync-dot"></span>
+          <span class="sync-text">Sincronizado</span>
+        </div>
+        <div class="header-student" id="header-student-info"></div>
+      </div>
     </div>
   </header>
 
@@ -44,20 +50,67 @@
             </svg>
           </div>
           <h2>Identificação do Aluno</h2>
-          <p class="login-desc">Informe seus dados para acessar as três atividades práticas. Suas respostas ficarão salvas no seu navegador até o envio final.</p>
+          <p class="login-desc">Acesse sua conta para responder e sincronizar as quatro atividades práticas em qualquer dispositivo.</p>
 
-          <div class="form-group">
-            <label class="form-label">Nome completo *</label>
-            <input type="text" class="form-input" id="login-name" placeholder="Seu nome completo" autocomplete="name">
-            <div class="form-error-msg" id="login-error">Preencha seu nome para continuar.</div>
+          <div class="login-cloud-notice">
+            <div class="cloud-notice-icon">☁️</div>
+            <div class="cloud-notice-text">
+              <strong>Acesso em Qualquer Lugar:</strong> Comece no laboratório, continue pelo celular e termine em casa. Suas respostas ficam salvas na nuvem!
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Turma <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
-            <input type="text" class="form-input" id="login-turma" placeholder="Ex: Informática 2A">
+          <div class="login-tabs">
+            <button class="login-tab-btn active" id="tab-login-btn">Já Tenho Acesso</button>
+            <button class="login-tab-btn" id="tab-register-btn">Primeiro Acesso</button>
           </div>
 
-          <button class="btn btn-primary btn-block btn-lg" id="login-btn">Entrar e Iniciar Atividades</button>
+          <!-- Formulário: Já tenho acesso -->
+          <div class="login-tab-panel active" id="panel-login">
+            <div class="form-group">
+              <label class="form-label">Matrícula ou Email Institucional *</label>
+              <input type="text" class="form-input" id="login-matricula" placeholder="Ex: 2024101234 ou seu email" autocomplete="username">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Senha ou PIN (4 a 6 dígitos) *</label>
+              <input type="password" class="form-input" id="login-password" placeholder="Sua senha de acesso" autocomplete="current-password">
+            </div>
+
+            <div class="form-error-msg" id="login-error-msg">Preencha sua matrícula e senha.</div>
+
+            <button class="btn btn-primary btn-block btn-lg" id="btn-do-login" style="margin-top:var(--space-md)">Entrar e Carregar Atividades</button>
+          </div>
+
+          <!-- Formulário: Primeiro acesso -->
+          <div class="login-tab-panel" id="panel-register">
+            <div class="form-group">
+              <label class="form-label">Matrícula ou Email Institucional *</label>
+              <input type="text" class="form-input" id="reg-matricula" placeholder="Ex: 2024101234">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Nome Completo *</label>
+              <input type="text" class="form-input" id="reg-name" placeholder="Seu nome completo">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Crie uma Senha ou PIN de Acesso *</label>
+              <input type="password" class="form-input" id="reg-password" placeholder="Ex: 1234 (para proteger suas respostas)">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Turma <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+              <input type="text" class="form-input" id="reg-turma" placeholder="Ex: Informática 2A ou Redes">
+            </div>
+
+            <div class="form-error-msg" id="reg-error-msg">Preencha todos os campos obrigatórios.</div>
+
+            <button class="btn btn-primary btn-block btn-lg" id="btn-do-register" style="margin-top:var(--space-md)">Criar Acesso e Iniciar</button>
+          </div>
+
+          <div style="text-align:center;margin-top:var(--space-lg);font-size:0.8rem">
+            <a href="#" id="link-offline-mode" style="color:var(--text-muted);text-decoration:underline">Acessar sem sincronização em nuvem (apenas neste aparelho)</a>
+          </div>
         </div>
       </div>
     </div>
@@ -172,7 +225,12 @@
 
   <!-- ========== FOOTER ========== -->
   <footer class="app-footer">
-    Arquitetura e Montagens de Computador · Professor Anderson · IFCE · 2026
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-md);max-width:var(--max-width);margin:0 auto">
+      <div>Arquitetura e Montagens de Computador · Professor Anderson · IFCE · 2026</div>
+      <div>
+        <button id="btn-open-prof-panel" class="btn btn-sm btn-outline" style="font-size:0.75rem;padding:4px 12px;cursor:pointer">Área do Professor</button>
+      </div>
+    </div>
   </footer>
 
   <!-- ========== MODAL DE CONFIRMAÇÃO ========== -->
@@ -180,10 +238,34 @@
     <div class="modal-box"></div>
   </div>
 
+  <!-- ========== MODAL DO PROFESSOR (PAINEL EM TEMPO REAL) ========== -->
+  <div class="modal-overlay" id="prof-modal-overlay">
+    <div class="modal-box prof-admin-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)">
+        <h3 style="margin:0;font-size:1.15rem">Painel do Professor — Acompanhamento em Tempo Real</h3>
+        <button id="btn-close-prof-modal" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:1rem;line-height:1">&times;</button>
+      </div>
+      <div id="prof-modal-body">
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:var(--space-md)">
+          Digite a senha de acesso administrativo para visualizar todos os alunos conectados e o status de cada atividade.
+        </p>
+        <div style="display:flex;gap:var(--space-sm);align-items:center;margin-bottom:var(--space-md)">
+          <input type="password" class="form-input" id="prof-pass-input" placeholder="Senha do professor" style="max-width:240px">
+          <button class="btn btn-primary btn-sm" id="btn-prof-auth">Acessar Painel</button>
+        </div>
+        <div id="prof-panel-content"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== TOAST CONTAINER ========== -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- ========== SCRIPTS ========== -->
+  <!-- ========== SUPABASE CLIENT (NUVEM VERCEL) ========== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+
+  <!-- ========== SCRIPTS DA APLICAÇÃO ========== -->
   <script src="js/app.js"></script>
   <script src="js/atividade1.js"></script>
   <script src="js/atividade2.js"></script>

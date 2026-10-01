@@ -1,0 +1,11 @@
+# Logs e temporários
+node_modules/
+npm-debug.log*
+*.tmp
+
+# Dados locais do servidor Node.js
+data/*.tmp
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
