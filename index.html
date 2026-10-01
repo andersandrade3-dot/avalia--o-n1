@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Atividades práticas sobre processadores e memória RAM – IFCE – Professor Anderson">
+  <title>Atividades — Processadores & Memória RAM | IFCE</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ========== HEADER ========== -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand" id="header-brand" style="cursor:pointer">
+        <div class="brand-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 4.5 8.25v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+        </div>
+        <span>Processadores & RAM — IFCE</span>
+      </div>
+
+      <nav class="header-nav">
+        <button id="nav-home">Início</button>
+        <button id="nav-report">Emitir Relatório</button>
+        <button id="nav-logout" style="display:none;opacity:0.8;font-size:0.78rem" title="Alterar identificação do aluno">Trocar Aluno</button>
+      </nav>
+
+      <div class="header-student" id="header-student-info"></div>
+    </div>
+  </header>
+
+  <!-- ========== MAIN ========== -->
+  <main class="main-container">
+
+    <!-- ===== LOGIN ===== -->
+    <div class="view active" id="login">
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+            </svg>
+          </div>
+          <h2>Identificação do Aluno</h2>
+          <p class="login-desc">Informe seus dados para acessar as três atividades práticas. Suas respostas ficarão salvas no seu navegador até o envio final.</p>
+
+          <div class="form-group">
+            <label class="form-label">Nome completo *</label>
+            <input type="text" class="form-input" id="login-name" placeholder="Seu nome completo" autocomplete="name">
+            <div class="form-error-msg" id="login-error">Preencha seu nome para continuar.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Turma <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+            <input type="text" class="form-input" id="login-turma" placeholder="Ex: Informática 2A">
+          </div>
+
+          <button class="btn btn-primary btn-block btn-lg" id="login-btn">Entrar e Iniciar Atividades</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== HOME ===== -->
+    <div class="view" id="home">
+      <div class="home-hero">
+        <h1>ATIVIDADES PRÁTICAS — HARDWARE</h1>
+        <p class="subtitle">Pesquise, teste na prática com ferramentas Linux e entenda a fundo a arquitetura de processadores e memória RAM.</p>
+      </div>
+
+      <div class="activities-grid">
+        <!-- Card 1 -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)">
+            <span class="card-badge badge-blue">Atividade 01</span>
+            <div id="a1-status" class="card-status pending"><span class="status-dot"></span> Pendente</div>
+          </div>
+          <h2>Você Compraria?</h2>
+          <p>Pesquise três processadores e monte um computador completo equilibrado com um orçamento de R$ 5.000.</p>
+          <button class="btn btn-primary btn-block" id="btn-start-a1">INICIAR ATIVIDADE</button>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)">
+            <span class="card-badge badge-purple">Atividade 02</span>
+            <div id="a2-status" class="card-status pending"><span class="status-dot"></span> Pendente</div>
+          </div>
+          <h2>Descubra o Processador e o Clock</h2>
+          <p>Investigue o processador do computador utilizando o Terminal (lscpu), CPU-X ou Hardinfo no Linux Mint.</p>
+          <button class="btn btn-accent btn-block" id="btn-start-a2">INICIAR ATIVIDADE</button>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)">
+            <span class="card-badge badge-green">Atividade 03</span>
+            <div id="a3-status" class="card-status pending"><span class="status-dot"></span> Pendente</div>
+          </div>
+          <h2>Memória RAM — Aprenda e Investigue</h2>
+          <p>Aprenda os conceitos de RAM, DDR4/DDR5 e investigue a memória do computador no Linux Mint.</p>
+          <button class="btn btn-emerald btn-block" id="btn-start-a3">INICIAR ATIVIDADE</button>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)">
+            <span class="card-badge badge-amber">Atividade 04</span>
+            <div id="a4-status" class="card-status pending"><span class="status-dot"></span> Pendente</div>
+          </div>
+          <h2>Estudo de Caso: Agência Pixel Rápido</h2>
+          <p>Analise os problemas de lentidão na agência de marketing, identifique gargalos e escolha o melhor upgrade de hardware.</p>
+          <button class="btn btn-warning btn-block" id="btn-start-a4" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;">INICIAR ATIVIDADE</button>
+        </div>
+      </div>
+
+      <!-- Resumo e Envio Unificado -->
+      <div class="home-report-section">
+        <h3>Envio Consolidado — Relatório Final</h3>
+        <p>As quatro atividades devem ser resolvidas e enviadas juntas em um único relatório para o Professor Anderson.</p>
+
+        <div class="completion-indicators">
+          <div class="completion-item pending" id="ci-a1">
+            <span class="ci-icon">—</span>
+            <span>Atividade 01: Processadores</span>
+          </div>
+          <div class="completion-item pending" id="ci-a2">
+            <span class="ci-icon">—</span>
+            <span>Atividade 02: Clock & Linux</span>
+          </div>
+          <div class="completion-item pending" id="ci-a3">
+            <span class="ci-icon">—</span>
+            <span>Atividade 03: Memória RAM</span>
+          </div>
+          <div class="completion-item pending" id="ci-a4">
+            <span class="ci-icon">—</span>
+            <span>Atividade 04: Estudo de Caso</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-lg" id="btn-generate-report">GERAR RELATÓRIO E ENVIAR AO PROFESSOR</button>
+      </div>
+    </div>
+
+    <!-- ===== ATIVIDADE 1 ===== -->
+    <div class="view" id="view-atividade1">
+      <div id="a1-content"></div>
+    </div>
+
+    <!-- ===== ATIVIDADE 2 ===== -->
+    <div class="view" id="view-atividade2">
+      <div id="a2-content"></div>
+    </div>
+
+    <!-- ===== ATIVIDADE 3 ===== -->
+    <div class="view" id="view-atividade3">
+      <div id="a3-content"></div>
+    </div>
+
+    <!-- ===== ATIVIDADE 4 ===== -->
+    <div class="view" id="view-atividade4">
+      <div id="a4-content"></div>
+    </div>
+
+    <!-- ===== RELATÓRIO FINAL / ENVIO ===== -->
+    <div class="view" id="view-report">
+      <div id="report-content"></div>
+    </div>
+
+  </main>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="app-footer">
+    Arquitetura e Montagens de Computador · Professor Anderson · IFCE · 2026
+  </footer>
+
+  <!-- ========== MODAL DE CONFIRMAÇÃO ========== -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-box"></div>
+  </div>
+
+  <!-- ========== TOAST CONTAINER ========== -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ========== SCRIPTS ========== -->
+  <script src="js/app.js"></script>
+  <script src="js/atividade1.js"></script>
+  <script src="js/atividade2.js"></script>
+  <script src="js/atividade3.js"></script>
+  <script src="js/atividade4.js"></script>
+
+  <!-- ========== VLIBRAS (ACESSIBILIDADE EM LIBRAS) ========== -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    new window.VLibras.Widget('https://vlibras.gov.br/app');
+  </script>
+
+</body>
+</html>
